@@ -1,38 +1,39 @@
 # zones/serializers.py
 from rest_framework import serializers
-from .models import RiskZone
+from .models import RiskZone, RiskZoneImage
+
+
+class RiskZoneImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RiskZoneImage
+        fields = ['id', 'image', 'caption', 'uploaded_at']
+        read_only_fields = ['uploaded_at']
+
 
 class RiskZoneSerializer(serializers.ModelSerializer):
-    polygon = serializers.SerializerMethodField()
-    center = serializers.SerializerMethodField()
+    images = RiskZoneImageSerializer(many=True, read_only=True)
+    images_urls = serializers.SerializerMethodField()
     
     class Meta:
         model = RiskZone
         fields = [
             'id', 'name', 'type', 'description', 'coordinates', 
-            'polygon', 'center', 'created_at', 'updated_at'
+            'created_at', 'updated_at', 'images', 'images_urls'
         ]
         read_only_fields = ['created_at', 'updated_at']
     
-    def get_polygon(self, obj):
-        """Retourne le polygone au format GeoJSON"""
-        return obj.polygon_geojson
+    def get_images_urls(self, obj):
+        """Retourne les URLs des images"""
+        request = self.context.get('request')
+        if request and obj.images.exists():
+            return [
+                request.build_absolute_uri(image.image.url) 
+                for image in obj.images.all() 
+                if image.image
+            ]
+        return []
     
-    def get_center(self, obj):
-        """Retourne les coordonnées du centre"""
-        return obj.get_center_coordinates()
-    
-    def validate_coordinates(self, value):
-        """Valide le format des coordonnées"""
-        if not isinstance(value, list) or not value:
-            raise serializers.ValidationError("Les coordonnées doivent être une liste non vide")
-        
-        if not isinstance(value[0], list):
-            raise serializers.ValidationError("Format de coordonnées invalide")
-        
-        # Vérifier que chaque point a au moins 2 coordonnées
-        for point in value[0]:
-            if not isinstance(point, list) or len(point) < 2:
-                raise serializers.ValidationError("Chaque point doit avoir au moins 2 coordonnées")
-        
-        return value
+    def create(self, validated_data):
+        """Crée une zone avec gestion des images"""
+        # Les images sont gérées séparément via l'upload
+        return super().create(validated_data)

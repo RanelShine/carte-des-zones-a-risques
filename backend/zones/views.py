@@ -2,62 +2,63 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db.models import Q
-from .models import RiskZone
-from .serializers import RiskZoneSerializer
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from django.shortcuts import get_object_or_404
+from .models import RiskZone, RiskZoneImage
+from .serializers import RiskZoneSerializer, RiskZoneImageSerializer
+
 
 class RiskZoneViewSet(viewsets.ModelViewSet):
     queryset = RiskZone.objects.all()
     serializer_class = RiskZoneSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     
-    def get_queryset(self):
-        """Filtrage optionnel par type de risque"""
-        queryset = RiskZone.objects.all()
-        risk_type = self.request.query_params.get('type', None)
+    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def upload_images(self, request, pk=None):
+        """Endpoint pour uploader des images pour une zone spécifique"""
+        zone = get_object_or_404(RiskZone, pk=pk)
+        images = request.FILES.getlist('images')  # Récupère toutes les images
         
-        if risk_type:
-            queryset = queryset.filter(type=risk_type)
+        if not images:
+            return Response(
+                {'error': 'Aucune image fournie'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        return queryset
-    
-    def create(self, request, *args, **kwargs):
-        """Créer une nouvelle zone à risque"""
-        serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=False, methods=['get'])
-    def by_type(self, request):
-        """Récupérer les zones groupées par type"""
-        zones_by_type = {}
-        
-        for risk_type_code, risk_type_name in RiskZone.RISK_TYPES:
-            zones = RiskZone.objects.filter(type=risk_type_code)
-            zones_by_type[risk_type_code] = {
-                'name': risk_type_name,
-                'count': zones.count(),
-                'zones': RiskZoneSerializer(zones, many=True).data
-            }
-        
-        return Response(zones_by_type)
-    
-    @action(detail=False, methods=['get'])
-    def stats(self, request):
-        """Statistiques des zones à risque"""
-        total_zones = RiskZone.objects.count()
-        stats_by_type = {}
-        
-        for risk_type_code, risk_type_name in RiskZone.RISK_TYPES:
-            count = RiskZone.objects.filter(type=risk_type_code).count()
-            stats_by_type[risk_type_code] = {
-                'name': risk_type_name,
-                'count': count,
-                'percentage': (count / total_zones * 100) if total_zones > 0 else 0
-            }
+        uploaded_images = []
+        for image in images:
+            # Créer une instance d'image pour chaque fichier
+            zone_image = RiskZoneImage.objects.create(
+                risk_zone=zone,
+                image=image,
+                caption=request.data.get('caption', '')
+            )
+            uploaded_images.append(RiskZoneImageSerializer(zone_image).data)
         
         return Response({
-            'total_zones': total_zones,
-            'by_type': stats_by_type
-        })
+            'message': f'{len(uploaded_images)} image(s) uploadée(s) avec succès',
+            'images': uploaded_images
+        }, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['get'])
+    def images(self, request, pk=None):
+        """Récupère toutes les images d'une zone"""
+        zone = get_object_or_404(RiskZone, pk=pk)
+        images = zone.images.all()
+        serializer = RiskZoneImageSerializer(images, many=True, context={'request': request})
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['delete'], url_path='images/(?P<image_id>[^/.]+)')
+    def delete_image(self, request, pk=None, image_id=None):
+        """Supprime une image spécifique d'une zone"""
+        zone = get_object_or_404(RiskZone, pk=pk)
+        image = get_object_or_404(RiskZoneImage, pk=image_id, risk_zone=zone)
+        image.delete()
+        return Response({'message': 'Image supprimée avec succès'}, status=status.HTTP_204_NO_CONTENT)
+
+
+class RiskZoneImageViewSet(viewsets.ModelViewSet):
+    """ViewSet pour gérer les images individuellement"""
+    queryset = RiskZoneImage.objects.all()
+    serializer_class = RiskZoneImageSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
