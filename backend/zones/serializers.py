@@ -9,7 +9,7 @@ class RiskZoneSerializer(serializers.ModelSerializer):
     class Meta:
         model = RiskZone
         fields = [
-            'id', 'name', 'type', 'description', 'coordinates', 
+            'id', 'name', 'type', 'description','image','coordinates', 
             'polygon', 'center', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
