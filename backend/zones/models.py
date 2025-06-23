@@ -15,7 +15,9 @@ class RiskZone(models.Model):
         ('secheresse', 'Sécheresse'),
         ('glissement de terrain', 'Glissement de terrain'),
         ('cours d\'eau', 'Cours d\'eau'),
-        ('zone agricole', 'Zone agricole')  # Ajouté selon votre frontend
+        ('zone agricole', 'Zone agricole'),
+        ('centres de santé', 'Centres de santé'),
+        ('apparition des insectes nuisibles', 'Apparition des insectes nuisibles')
     ]
    
     name = models.CharField(max_length=200, verbose_name="Nom de la zone")
